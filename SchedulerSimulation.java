@@ -1,5 +1,7 @@
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
@@ -30,6 +32,9 @@ class Process implements Runnable {
     private int timeQuantum; // Time slice (time quantum) allowed per CPU access (in milliseconds)
     private int remainingTime; // Time left for the process to finish its execution
     private int priority;  // Feature 1
+    private int completionTime = 0;
+    private int turnaroundTime = 0;
+    private int waitingTime = 0;
 
     // Constructor to initialize the process with name, burst time, and time quantum
     public Process(String name, int burstTime, int timeQuantum , int priority) {
@@ -133,7 +138,16 @@ class Process implements Runnable {
 
     public int getPriority() {
     return priority;
-}
+    }
+
+    public int getCompletionTime() { return completionTime; }
+    public void setCompletionTime(int completionTime) { this.completionTime = completionTime; }
+
+    public int getTurnaroundTime() { return turnaroundTime; }
+    public void setTurnaroundTime(int turnaroundTime) { this.turnaroundTime = turnaroundTime; }
+
+    public int getWaitingTime() { return waitingTime; }
+    public void setWaitingTime(int waitingTime) { this.waitingTime = waitingTime; }
 
     public int getBurstTime() {
         return burstTime;
@@ -151,6 +165,8 @@ class Process implements Runnable {
 
 public class SchedulerSimulation {
     private static int totalContextSwitches = 0; // Feature 2
+    private static int currentTime = 0;
+    private static List<Process> completedProcesses = new ArrayList<>();
     public static void main(String[] args) {
      
         int studentID = 445050126;  // ← CHANGE THIS TO YOUR ACTUAL STUDENT ID
@@ -258,20 +274,49 @@ public class SchedulerSimulation {
             // Retrieve the process associated with the thread from the map
             Process process = processMap.get(currentThread);
             
-            // Check if the process is not finished
-            if (!process.isFinished()) {
-                // If the process still has remaining time, check if there are more processes in queue
+        int runTime = Math.min(timeQuantum, process.getRemainingTime());
+            currentTime += runTime;
+
+            if (process.isFinished()) {
+                process.setCompletionTime(currentTime);
+                process.setTurnaroundTime(process.getCompletionTime()); // Arrival time = 0
+                process.setWaitingTime(process.getTurnaroundTime() - process.getBurstTime());
+                completedProcesses.add(process);
+            } else {
                 if (!processQueue.isEmpty()) {
-                    // Re-enqueue the process to give it another chance to run in the next round
                     addProcessToQueue(process, processQueue, processMap);
                 } else {
-                    // If this is the last process in the queue, run it to completion
-                    System.out.println(Colors.BRIGHT_YELLOW + "  ⚠ " + Colors.CYAN + process.getName() + 
-                                      Colors.RESET + Colors.YELLOW + " is the last process → running to completion" + 
-                                      Colors.RESET);
-                    process.runToCompletion(); // Run until the process completes
+                    System.out.println(Colors.BRIGHT_YELLOW + " ⚠ " + process.getName() + " is the last process → running to completion" + Colors.RESET);
+                    process.runToCompletion();
+                    
+                    process.setCompletionTime(currentTime + process.getRemainingTime());
+                    process.setTurnaroundTime(process.getCompletionTime());
+                    process.setWaitingTime(process.getTurnaroundTime() - process.getBurstTime());
+                    completedProcesses.add(process);
                 }
             }
+        }
+
+        // Feature 3: Print final results table and averages
+        System.out.println(Colors.BOLD + Colors.CYAN + "=================================================================================" + Colors.RESET);
+        System.out.println(Colors.BOLD + Colors.WHITE + " Process | Burst Time | Priority | Completion Time | Turnaround Time | Waiting Time " + Colors.RESET);
+        System.out.println(Colors.BOLD + Colors.CYAN + "=================================================================================" + Colors.RESET);
+
+        double totalTAT = 0;
+        double totalWT = 0;
+
+        for (Process p : completedProcesses) {
+            System.out.printf(" %-7s | %-10d | %-8d | %-15d | %-15d | %-12d %n",
+                    p.getName(), p.getBurstTime(), p.getPriority(),
+                    p.getCompletionTime(), p.getTurnaroundTime(), p.getWaitingTime());
+            totalTAT += p.getTurnaroundTime();
+            totalWT += p.getWaitingTime();
+        }
+
+        System.out.println(Colors.BOLD + Colors.CYAN + "=================================================================================" + Colors.RESET);
+        if (!completedProcesses.isEmpty()) {
+            System.out.printf(Colors.BOLD + Colors.GREEN + " Average Turnaround Time: %.2f ms" + Colors.RESET + "%n", (totalTAT / completedProcesses.size()));
+            System.out.printf(Colors.BOLD + Colors.GREEN + " Average Waiting Time:    %.2f ms" + Colors.RESET + "%n\n", (totalWT / completedProcesses.size()));
         }
         
         // End of the scheduler simulation
